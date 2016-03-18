@@ -12,15 +12,20 @@ import java.util.function.ToIntBiFunction;
 public class Bot implements BotInterface{
     @Override
     public Move getMoveForTurn(int numTurn, int reinforcementCount, World world) {
-        Vector2i size = world.getSize();
-        Team myTeam = world.getMyTeam();
-        List<Cell> myCells = world.getMyCells();
-        Cell first = myCells.get(0);
-        List<Cell> possibleCells = world.getAdjCells(first);
-
         List<Reinforcement> reinforcements = new ArrayList<>();
-        reinforcements.add(new Reinforcement(first.x, first.y, reinforcementCount));
         List<Action> actions = new ArrayList<>();
+        List<Blob> blobs = generateBlobs(world);
+
+        int totalPriority = world.getMyCells().stream().mapToInt(cell -> cell.armySize).sum();
+        for(Blob blob: blobs){
+            int priority = blob.getArmySize();
+            int blobReinforcement = reinforcementCount * (priority / totalPriority);
+            reinforcementCount -= blobReinforcement;
+            totalPriority -= priority;
+            reinforcements.addAll(blob.reinforcements(world, blobReinforcement));
+            actions.addAll(blob.move(world));
+        }
+
         return new Move(reinforcements, actions);
     }
 
@@ -49,7 +54,7 @@ public class Bot implements BotInterface{
     }
 
     private int getPriority(World world, Cell cell) {
-        return world.getAdjCells(cell).stream().mapToInt(cell1 -> cell1.getTeam().equals(world.getMyTeam()) ? 0 : cell1.armySize).sum();
+        return world.getAdjCells(cell).stream().mapToInt(cell1 -> world.getMyTeam().equals(cell1.getTeam()) ? 0 : cell1.armySize + 1).sum();
     }
 
     private class Blob {
@@ -68,6 +73,40 @@ public class Bot implements BotInterface{
         }
 
         List<Action> move(World world){
+            List<Action> actions = new ArrayList<>();
+            for(Cell cell: cells){
+                int priority = getPriority(world, cell);
+                int armyToSpare = cell.armySize - 1;
+                int surroundingPriority = world.getAdjCells(cell).stream().mapToInt(cell1 -> getPriority(world, cell1)).sum() + priority;
+                for(Cell s: world.getAdjCells(cell)){
+                    int cellPriority = getPriority(world, s);
+                    int moveArmy = armyToSpare * (cellPriority / surroundingPriority);
+                    surroundingPriority -= cellPriority;
+                    armyToSpare -= moveArmy;
+                    actions.add(new Action(cell.x, cell.y, moveArmy, getDirection(cell, s)));
+                }
+            }
+            return actions;
+        }
+
+        List<Reinforcement> reinforcements(World world, int reinforcementCount){
+            int totalPriority = cells.stream().mapToInt(cell1 -> getPriority(world, cell1)).sum();
+            List<Reinforcement> reinforcementList = new ArrayList<>();
+            for(Cell s: cells){
+                int cellPriority = getPriority(world, s);
+                int reinforce = reinforcementCount * (cellPriority / totalPriority);
+                totalPriority -= cellPriority;
+                reinforcementCount -= reinforce;
+                reinforcementList.add(new Reinforcement(s.x, s.y, reinforce));
+            }
+            return reinforcementList;
+        }
+
+        Direction getDirection(Cell src, Cell dest) {
+            int x = dest.x - src.x;
+            int y = dest.y - src.y;
+            if(y == 0) return x == 1 ? Direction.RIGHT : Direction.LEFT;
+            return y == 1 ? Direction.UP : Direction.DOWN;
         }
     }
 
