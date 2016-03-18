@@ -1,5 +1,4 @@
 import com.facebook.urctf.bot.BotInterface;
-import com.facebook.urctf.bot.Vector2i;
 import com.facebook.urctf.bot.World;
 import com.facebook.urctf.protocol.*;
 
@@ -16,7 +15,8 @@ public class Bot implements BotInterface{
         List<Action> actions = new ArrayList<>();
         List<Blob> blobs = generateBlobs(world);
 
-        int totalPriority = world.getMyCells().stream().mapToInt(cell -> cell.armySize).sum();
+        int totalPriority = 0;
+        for(Cell cell: world.getMyCells()) totalPriority += cell.armySize;
         for(Blob blob: blobs){
             int priority = blob.getArmySize();
             int blobReinforcement = reinforcementCount * (priority / totalPriority);
@@ -40,10 +40,11 @@ public class Bot implements BotInterface{
             toCheck.add(current);
             while (toCheck.size() > 0){
                 Cell checking = toCheck.pollFirst();
+                blob.cells.add(checking);
                 for(Cell cell: world.getAdjCells(checking)){
                     if(blob.cells.contains(cell)) continue;
                     if(cell.getTeam().equals(world.getMyTeam())) {
-                        blob.cells.add(cell);
+                        cellSet.remove(cell);
                         toCheck.add(cell);
                     }
                 }
@@ -54,7 +55,9 @@ public class Bot implements BotInterface{
     }
 
     private int getPriority(World world, Cell cell) {
-        return world.getAdjCells(cell).stream().mapToInt(cell1 -> world.getMyTeam().equals(cell1.getTeam()) ? 0 : cell1.armySize + 1).sum();
+        int sum = 0;
+        for(Cell s: world.getAdjCells(cell)) sum += (world.getMyTeam().equals(s.getTeam()) ? 0 : s.armySize + 1);
+        return sum;
     }
 
     private class Blob {
@@ -69,7 +72,9 @@ public class Bot implements BotInterface{
         }
 
         int getArmySize(){
-            return cells.stream().mapToInt(cell -> cell.armySize).sum();
+            int sum = 0;
+            for(Cell s: cells) sum += s.getArmySize();
+            return sum;
         }
 
         List<Action> move(World world){
@@ -77,7 +82,9 @@ public class Bot implements BotInterface{
             for(Cell cell: cells){
                 int priority = getPriority(world, cell);
                 int armyToSpare = cell.armySize - 1;
-                int surroundingPriority = world.getAdjCells(cell).stream().mapToInt(cell1 -> getPriority(world, cell1)).sum() + priority;
+                int surroundingPriority = priority;
+                for(Cell s: world.getAdjCells(cell)) surroundingPriority += getPriority(world, s);
+
                 for(Cell s: world.getAdjCells(cell)){
                     int cellPriority = getPriority(world, s);
                     int moveArmy = armyToSpare * (cellPriority / surroundingPriority);
@@ -90,7 +97,8 @@ public class Bot implements BotInterface{
         }
 
         List<Reinforcement> reinforcements(World world, int reinforcementCount){
-            int totalPriority = cells.stream().mapToInt(cell1 -> getPriority(world, cell1)).sum();
+            int totalPriority = 0;
+            for(Cell s: cells) totalPriority += getPriority(world, s);
             List<Reinforcement> reinforcementList = new ArrayList<>();
             for(Cell s: cells){
                 int cellPriority = getPriority(world, s);
